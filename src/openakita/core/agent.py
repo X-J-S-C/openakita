@@ -76,6 +76,7 @@ from ..tools.handlers.plugins import create_handler as create_plugins_handler
 from ..tools.handlers.powershell import create_handler as create_powershell_handler
 from ..tools.handlers.profile import create_handler as create_profile_handler
 from ..tools.handlers.scheduled import create_handler as create_scheduled_handler
+from ..tools.handlers.safety import create_handler as create_safety_handler
 from ..tools.handlers.search import create_handler as create_search_handler
 from ..tools.handlers.skill_store import create_handler as create_skill_store_handler
 from ..tools.handlers.skills import create_handler as create_skills_handler
@@ -545,7 +546,9 @@ class Agent:
             _all_tools.extend(_DT)
         from ..tools.definitions.agent import AGENT_TOOLS
         from ..tools.definitions.org_setup import ORG_SETUP_TOOLS
+        from ..tools.definitions.safety import SAFETY_TOOLS
 
+        _all_tools.extend(SAFETY_TOOLS)
         _all_tools.extend(AGENT_TOOLS)
         _all_tools.extend(ORG_SETUP_TOOLS)
         if opencli_available():
@@ -647,7 +650,9 @@ class Agent:
 
         from ..tools.definitions.agent import AGENT_TOOLS
         from ..tools.definitions.org_setup import ORG_SETUP_TOOLS
+        from ..tools.definitions.safety import SAFETY_TOOLS
 
+        self._tools.extend(SAFETY_TOOLS)
         self._tools.extend(AGENT_TOOLS)
         self._tools.extend(ORG_SETUP_TOOLS)
         logger.info(
@@ -1513,6 +1518,9 @@ class Agent:
         if settings.hub_enabled:
             self.handler_registry.register("agent_hub", create_agent_hub_handler(self))
             self.handler_registry.register("skill_store", create_skill_store_handler(self))
+
+        # 安全申诉
+        self.handler_registry.register("safety", create_safety_handler(self))
 
         # PowerShell（仅 Windows 平台注册）
         import platform
@@ -4427,6 +4435,20 @@ class Agent:
                                     # 切回主分支（或保持，视用户工作流而定）
                                     await _run_git(["checkout", "-"])
                                     logger.info(f"[Git] Skill crystallized and committed to branch: {branch_name}")
+
+                                    # [Distillation] 导出蒸馏数据
+                                    try:
+                                        from ..evolution.distillation import DistillationExporter
+                                        exporter = DistillationExporter(settings.project_root / "data")
+                                        exporter.export_alignment_data(
+                                            task_id=session_id,
+                                            task_desc=eff_task_desc,
+                                            trace=_trace_snapshot,
+                                            skill_content=res.skill_content
+                                        )
+                                    except Exception as d_err:
+                                        logger.debug(f"[Distillation] Export failed: {d_err}")
+
                                 except Exception as g_err:
                                     logger.debug(f"[Git] Auto-commit failed: {g_err}")
 

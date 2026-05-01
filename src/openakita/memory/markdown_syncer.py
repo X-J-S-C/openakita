@@ -103,3 +103,20 @@ class MarkdownSyncer:
 
         lines = [l.strip() for l in content.splitlines() if l.strip() and not l.startswith("#")]
         return lines[0] if lines else "No description"
+
+    def generate_graph_mermaid(self) -> str:
+        """生成记忆关联的 Mermaid 图谱文本。"""
+        lines = ["graph TD"]
+
+        # 1. 核心索引 L1
+        lines.append("    L1[L1: Triggers Index] --> L2[L2: Verified Facts]")
+
+        # 2. 事实与 SOP 关联
+        if self.l2_path.exists():
+            lines.append("    L2 --> L3[L3: Crystallized SOPs]")
+
+        # 3. 具体 SOP 节点
+        for sop_file in self.l3_dir.glob("*.md"):
+            lines.append(f"    L3 --> {sop_file.stem}")
+
+        return "\n".join(lines)

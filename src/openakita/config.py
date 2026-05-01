@@ -607,6 +607,7 @@ class Settings(BaseSettings):
     evolution_enabled: bool = Field(default=True, description="是否启用技能自动进化 (Crystallization)")
     evolution_model: str = Field(default="deepseek-v4-pro", description="技能结晶专用模型")
     evolution_auto_approve: bool = Field(default=False, description="是否完全自动进阶（True=无需人工审核）")
+    evolution_dry_run: bool = Field(default=False, description="是否在结晶后进行自动演练验证")
 
     # === 组织编排 · 任务链终止防护 ===
     # 这组开关用于防止：

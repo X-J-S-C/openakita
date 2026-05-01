@@ -109,6 +109,8 @@ class MemoryHandler:
             result = await self._search_relational_memory(params)
         elif tool_name == "get_session_context":
             return self._get_session_context(params)
+        elif tool_name == "visualize_memory_graph":
+            return self._visualize_memory_graph(params)
         else:
             return f"❌ Unknown memory tool: {tool_name}"
 
@@ -878,3 +880,10 @@ def create_handler(agent: "Agent"):
     handler = MemoryHandler(agent)
     agent._memory_handler = handler
     return handler.handle
+
+    def _visualize_memory_graph(self, params: dict) -> str:
+        """生成记忆图谱的 Mermaid 展现。"""
+        if hasattr(self.agent.memory_manager, "markdown_syncer"):
+            mermaid = self.agent.memory_manager.markdown_syncer.generate_graph_mermaid()
+            return f"✅ 已生成记忆图谱 (Mermaid 格式):\n\n```mermaid\n{mermaid}\n```\n\n提示：你可以将此代码粘贴到 Mermaid 渲染器中查看，或让我在回复中直接渲染。"
+        return "❌ 当前记忆系统不支持图谱可视化。"

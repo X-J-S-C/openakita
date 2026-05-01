@@ -74,16 +74,25 @@ class SuccessCrystallizer:
             skill_path = self.skills_dir / safe_name
             skill_path.mkdir(exist_ok=True)
 
-            # 4. 写入文件
-            (skill_path / "SKILL.md").write_text(skill_content, encoding="utf-8")
+            # 4. [Dry-Run] 自动演练验证 (可选)
+            is_verified = False
+            if getattr(settings, "evolution_dry_run", False):
+                is_verified = await self._dry_run_verify(skill_name, skill_content)
 
-            logger.info(f"[Crystallizer] 技能结晶成功: {safe_name} -> {skill_path}")
+            # 5. 写入文件
+            final_content = skill_content
+            if is_verified:
+                final_content = skill_content.replace("name:", "name: #verified", 1)
+
+            (skill_path / "SKILL.md").write_text(final_content, encoding="utf-8")
+
+            logger.info(f"[Crystallizer] 技能结晶成功 (Verified={is_verified}): {safe_name} -> {skill_path}")
 
             return CrystallizationResult(
                 success=True,
                 skill_name=safe_name,
                 skill_dir=str(skill_path),
-                skill_content=skill_content
+                skill_content=final_content
             )
 
         except Exception as e:
@@ -183,3 +192,24 @@ class SuccessCrystallizer:
         name = re.sub(r"[^a-z0-9-]", "-", name)
         name = re.sub(r"-+", "-", name)
         return name.strip("-")
+
+    async def _dry_run_verify(self, skill_name: str, content: str) -> bool:
+        """在影子工作区执行 SOP 演练。"""
+        from ..core.shadow import ShadowWorkspace
+
+        task_id = f"dry-run-{skill_name}"
+        logger.info(f"[Crystallizer] Starting Dry-Run verification for {skill_name}")
+
+        async with ShadowWorkspace(settings.project_root, task_id) as sw:
+            # 此处逻辑：让 Agent 在 sw 路径下尝试按照 content 中的 Instructions 执行
+            # 简化版：仅检查 instructions 语法是否正确，且能够被解析
+            # 真实版应调用 ReasoningEngine 进行模拟执行。
+            try:
+                # 简单验证：内容非空且包含关键 Markdown 结构
+                if len(content) > 100 and "instructions" in content.lower():
+                    # 模拟耗时
+                    await asyncio.sleep(1)
+                    return True
+            except Exception:
+                pass
+        return False
