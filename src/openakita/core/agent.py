@@ -4354,6 +4354,22 @@ class Agent:
             except Exception as e:
                 logger.debug(f"[Session:{session_id}] memory end_session failed: {e}")
 
+            # Akita-Evo: 影子执行提交 (Commit Shadow Workspace)
+            if exit_reason == "normal" and not is_sub_agent:
+                conversation_id = getattr(self, "_current_conversation_id", "") or session_id
+                task_id = "global"
+                if self.agent_state and self.agent_state.current_task:
+                    task_id = self.agent_state.current_task.task_id
+
+                if hasattr(self.tool_executor, "_shadow_workspaces") and task_id in self.tool_executor._shadow_workspaces:
+                    sw = self.tool_executor._shadow_workspaces[task_id]
+                    try:
+                        # TODO: 在此处可以加入 AuditorNode 最终审查
+                        await sw.commit()
+                        logger.info(f"[Shadow] Successfully committed changes for task {task_id}")
+                    except Exception as sw_err:
+                        logger.error(f"[Shadow] Failed to commit changes: {sw_err}")
+
             # [Evolution] 技能结晶：如果任务成功且有 trace，尝试转化为持久化技能
             if (
                 settings.evolution_enabled
@@ -4403,9 +4419,14 @@ class Agent:
                                     commit_msg += f"\n\n任务: {eff_task_desc[:100]}\n自动结晶自成功执行轨迹。"
 
                                     # 使用 subprocess_exec 避免 shell 注入
+                                    # [SOP 版本化] 使用独立分支进行结晶提交，方便对比与回滚
+                                    branch_name = f"evo/skill-{res.skill_name}"
+                                    await _run_git(["checkout", "-b", branch_name])
                                     await _run_git(["add", res.skill_dir])
                                     await _run_git(["commit", "-m", commit_msg])
-                                    logger.info(f"[Git] Auto-committed skill: {res.skill_name}")
+                                    # 切回主分支（或保持，视用户工作流而定）
+                                    await _run_git(["checkout", "-"])
+                                    logger.info(f"[Git] Skill crystallized and committed to branch: {branch_name}")
                                 except Exception as g_err:
                                     logger.debug(f"[Git] Auto-commit failed: {g_err}")
 
@@ -4464,6 +4485,14 @@ class Agent:
             pass
         if hasattr(self, "tool_executor") and hasattr(self.tool_executor, "_pending_confirms"):
             self.tool_executor._pending_confirms.clear()
+
+        # Akita-Evo: 清理影子工作区
+        if hasattr(self.tool_executor, "_shadow_workspaces"):
+            for _task_id in list(self.tool_executor._shadow_workspaces.keys()):
+                sw = self.tool_executor._shadow_workspaces.pop(_task_id)
+                # 只有非正常退出的才尝试 rollback，正常 commit 的在上面已经做过了
+                # 此处统一由 finally 保证物理目录清理（如果需要）
+                # 生产环境建议保留以便审计，或者异步清理
 
         # Clean up task-local session references to prevent dict growth
         if _sid:

@@ -121,12 +121,22 @@ class BrowserHandler:
             output = f"❌ {result.get('error', '未知错误')}"
 
         if actual_tool_name == "browser_get_content":
-            # 集成 SimpHTML 优化
+            # 集成 SimpHTML 优化 (通过浏览器执行 JS 获取最准确的视觉显著内容)
             if params.get("format") == "html" and params.get("optimize", True):
                 try:
-                    from ..browser.simphtml import optimize_html_for_tokens
-                    # output 包含 "✅ " 前缀，需要先剥离
-                    raw_html = output[2:] if output.startswith("✅ ") else output
+                    from ..browser.simphtml import JS_OPT_HTML, optimize_html_for_tokens
+
+                    # 优先通过浏览器执行 JS 获取简化后的 DOM
+                    pw = self.agent.pw_tools
+                    js_res = await pw.execute_js(f"{JS_OPT_HTML}\nreturn optHTML();")
+
+                    if js_res.get("success"):
+                        raw_html = js_res.get("result", "")
+                    else:
+                        # Fallback: 使用 BeautifulSoup 处理当前已获取的 output
+                        raw_html = output[2:] if output.startswith("✅ ") else output
+
+                    # 进一步通过 Python 进行结构清洗和截断
                     optimized = optimize_html_for_tokens(raw_html, max_chars=params.get("max_length", self.CONTENT_DEFAULT_MAX_LENGTH))
                     output = f"✅ {optimized}"
                 except Exception as e:

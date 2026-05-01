@@ -77,7 +77,6 @@ function optHTML(text_only=false) {
     if (text_only) return domCopy.textContent;
     return domCopy.outerHTML;
 }
-return optHTML();
 '''
 
 def optimize_html_for_tokens(html_content: str, max_chars: int = 30000) -> str:

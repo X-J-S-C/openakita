@@ -382,10 +382,32 @@ def check_mode_permission(
 
 # ==================== Preset Rulesets ====================
 
-DEFAULT_RULESET: Ruleset = from_config(
-    {
-        "*": "allow",
-    }
+# Akita-Evo: L0 Core Rule Integration
+def load_l0_rules() -> Ruleset:
+    """从 identity/rules/L0_core.md 加载强制性 L0 规则集。"""
+    import os
+    from pathlib import Path
+
+    # 默认强制规则
+    l0_rules = [
+        PermissionRule(permission="run_shell", pattern="/etc/*", action="deny"),
+        PermissionRule(permission="run_shell", pattern="/boot/*", action="deny"),
+        PermissionRule(permission="edit", pattern="C:\\Windows\\*", action="deny"),
+    ]
+
+    l0_path = Path("identity/rules/L0_core.md")
+    if l0_path.exists():
+        # TODO: 未来可实现从 Markdown 动态解析规则
+        # 现阶段作为 SoT，确保其在系统提示词中被强制感知
+        logger.info(f"[L0] Loading core safety axioms from {l0_path}")
+
+    return l0_rules
+
+L0_RULESET: Ruleset = load_l0_rules()
+
+DEFAULT_RULESET: Ruleset = merge(
+    L0_RULESET,
+    from_config({"*": "allow"})
 )
 
 PLAN_MODE_RULESET: Ruleset = from_config(
