@@ -397,9 +397,17 @@ def load_l0_rules() -> Ruleset:
 
     l0_path = Path("identity/rules/L0_core.md")
     if l0_path.exists():
-        # TODO: 未来可实现从 Markdown 动态解析规则
-        # 现阶段作为 SoT，确保其在系统提示词中被强制感知
-        logger.info(f"[L0] Loading core safety axioms from {l0_path}")
+        try:
+            content = l0_path.read_text(encoding="utf-8")
+            # 简单解析 Markdown 中的 - Action: Deny, Permission: x, Pattern: y
+            import re
+            matches = re.finditer(r"Permission:\s*(\w+|\*).*?Pattern:\s*([^\n\r]+).*?Action:\s*Deny", content, re.S | re.I)
+            for m in matches:
+                p, pat = m.group(1).strip(), m.group(2).strip()
+                l0_rules.append(PermissionRule(permission=p, pattern=pat, action="deny"))
+            logger.info(f"[L0] Loaded {len(l0_rules)} safety axioms from {l0_path}")
+        except Exception as e:
+            logger.warning(f"[L0] Failed to parse L0_core.md: {e}")
 
     return l0_rules
 

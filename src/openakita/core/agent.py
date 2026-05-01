@@ -896,10 +896,19 @@ class Agent:
         # Akita-Evo: L1-Trigger 注入。如果当前意图命中了 L1 索引，则强制解冻关联工具。
         l1_promoted: set[str] = set()
         if intent and hasattr(self.memory_manager, "markdown_syncer"):
-            # TODO: 未来实现更复杂的 L1 匹配算法
-            # 目前简化：如果任务描述中包含某些关键词，则加载对应工具
-            # 这里是 Tiered Tool Injection 的核心挂载点
-            pass
+            # L1 Heuristic: 基于关键词的初级动态工具注入
+            intent_lower = intent.lower()
+            trigger_map = {
+                "search": {"web_search", "news_search", "search_memory"},
+                "browser": {"browser_navigate", "browser_screenshot", "browser_click"},
+                "execute": {"run_shell", "run_powershell"},
+                "file": {"read_file", "write_file", "edit_file", "list_directory"}
+            }
+            for kw, tools_to_inject in trigger_map.items():
+                if kw in intent_lower:
+                    l1_promoted |= tools_to_inject
+            if l1_promoted:
+                logger.info(f"[L1] Promoted tools based on intent: {l1_promoted}")
 
         deferred_count = 0
         for tool in tools:

@@ -18,4 +18,14 @@ Classification: TOP_SECRET_SYSTEM_LEVEL
 3. **最终裁决**: 所有的申诉将由用户（Human-in-the-loop）进行最终裁决。
 
 ---
+- Permission: run_shell
+  Pattern: /etc/*
+  Action: Deny
+- Permission: run_shell
+  Pattern: /boot/*
+  Action: Deny
+- Permission: edit
+  Pattern: C:\Windows\*
+  Action: Deny
+
 *OpenAkita 安全治理委员会 (The Auditor)*
