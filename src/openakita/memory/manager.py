@@ -108,6 +108,10 @@ class MemoryManager:
         # v2: Retrieval Engine (with brain for LLM query decomposition)
         self.retrieval_engine = RetrievalEngine(self.store, brain=brain)
 
+        # Akita-Evo: Markdown-DB Syncer
+        from .markdown_syncer import MarkdownSyncer
+        self.markdown_syncer = MarkdownSyncer(self.data_dir, self.store)
+
         # v3: Relational Memory (Mode 2) — initialized lazily on first use
         self.relational_store = None
         self.relational_encoder = None
@@ -177,6 +181,12 @@ class MemoryManager:
         memories.json is kept as a secondary copy for backward compat,
         and legacy JSON will be backfilled into SQLite when needed.
         """
+        # Akita-Evo: Sync Markdown SoT to DB on startup
+        try:
+            self.markdown_syncer.sync_all_to_db()
+        except Exception as e:
+            logger.warning(f"Initial Markdown sync failed: {e}")
+
         try:
             all_mems = self.store.load_all_memories()
             migrated = self._backfill_legacy_json_memories(all_mems)
@@ -1052,6 +1062,13 @@ class MemoryManager:
                     importance=memory.importance_score,
                     tags=memory.tags,
                 )
+
+        # Akita-Evo: Sync to Markdown L2 Facts
+        if memory.type == MemoryType.FACT and memory.importance_score >= 0.7:
+            try:
+                self.markdown_syncer.add_l2_fact(memory.content)
+            except Exception as e:
+                logger.warning(f"Failed to sync fact to Markdown: {e}")
 
         # v2: set TTL then save to SQLite + FTS
         _apply_retention(memory)

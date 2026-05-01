@@ -382,10 +382,40 @@ def check_mode_permission(
 
 # ==================== Preset Rulesets ====================
 
-DEFAULT_RULESET: Ruleset = from_config(
-    {
-        "*": "allow",
-    }
+# Akita-Evo: L0 Core Rule Integration
+def load_l0_rules() -> Ruleset:
+    """从 identity/rules/L0_core.md 加载强制性 L0 规则集。"""
+    import os
+    from pathlib import Path
+
+    # 默认强制规则
+    l0_rules = [
+        PermissionRule(permission="run_shell", pattern="/etc/*", action="deny"),
+        PermissionRule(permission="run_shell", pattern="/boot/*", action="deny"),
+        PermissionRule(permission="edit", pattern="C:\\Windows\\*", action="deny"),
+    ]
+
+    l0_path = Path("identity/rules/L0_core.md")
+    if l0_path.exists():
+        try:
+            content = l0_path.read_text(encoding="utf-8")
+            # 简单解析 Markdown 中的 - Action: Deny, Permission: x, Pattern: y
+            import re
+            matches = re.finditer(r"Permission:\s*(\w+|\*).*?Pattern:\s*([^\n\r]+).*?Action:\s*Deny", content, re.S | re.I)
+            for m in matches:
+                p, pat = m.group(1).strip(), m.group(2).strip()
+                l0_rules.append(PermissionRule(permission=p, pattern=pat, action="deny"))
+            logger.info(f"[L0] Loaded {len(l0_rules)} safety axioms from {l0_path}")
+        except Exception as e:
+            logger.warning(f"[L0] Failed to parse L0_core.md: {e}")
+
+    return l0_rules
+
+L0_RULESET: Ruleset = load_l0_rules()
+
+DEFAULT_RULESET: Ruleset = merge(
+    L0_RULESET,
+    from_config({"*": "allow"})
 )
 
 PLAN_MODE_RULESET: Ruleset = from_config(

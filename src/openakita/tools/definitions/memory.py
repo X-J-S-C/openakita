@@ -268,4 +268,10 @@ MEMORY_TOOLS = [
             },
         },
     },
+    {
+        "name": "visualize_memory_graph",
+        "category": "Memory",
+        "description": "Generate a Mermaid graph representing the relationship between L1-L4 memory layers and crystallized SOPs.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
 ]

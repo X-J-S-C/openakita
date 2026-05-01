@@ -167,6 +167,15 @@ class ToolExecutor:
         # Current mode for permission checks (set by ReasoningEngine before tool loop)
         self._current_mode: str = "agent"
 
+        # Akita-Evo: Shadow Workspaces (task_id -> ShadowWorkspace)
+        self._shadow_workspaces: dict[str, Any] = {}
+
+        # Akita-Evo: AuditorNode
+        from .auditor import AuditorNode
+        from .permission import L0_RULESET
+        # 传递 brain 以支持混合审计
+        self._auditor = AuditorNode(L0_RULESET, brain=self._agent_ref.brain if self._agent_ref else None)
+
         # Extra permission rules injected by AgentFactory (profile rules)
         self._extra_permission_rules: list | None = None
 
@@ -407,6 +416,16 @@ class ToolExecutor:
         if perm_block:
             return perm_block
 
+        # Akita-Evo: AuditorNode Pre-Audit
+        audit_res = self._auditor.pre_audit(tool_name, tool_input)
+        if not audit_res.allowed:
+            # 自动生成拦截说明并允许申诉
+            return (
+                f"❌ AuditorNode 拦截了操作: {audit_res.reason}\n"
+                "如果你认为该操作是安全的且必须执行，请调用 ask_user 提交一份 SafetyAppeal，"
+                "包含：[目标操作] + [必要性理由] + [安全缓解措施]。"
+            )
+
         return await self._execute_tool_impl(tool_name, tool_input)
 
     async def _dispatch_hook(self, hook_name: str, **kwargs) -> None:
@@ -425,6 +444,29 @@ class ToolExecutor:
         tool_input: dict,
     ) -> str:
         """Execute a tool after todo / permission gates have been handled."""
+        # Akita-Evo: 影子执行劫持
+        from .shadow import is_shadow_eligible, ShadowWorkspace
+
+        agent = getattr(self, "_agent_ref", None)
+        task_id = "global"
+        if agent and agent.agent_state and agent.agent_state.current_task:
+            task_id = agent.agent_state.current_task.task_id
+
+        if is_shadow_eligible(tool_name):
+            if task_id not in self._shadow_workspaces:
+                sw = ShadowWorkspace(settings.project_root, task_id)
+                await sw.__aenter__()
+                self._shadow_workspaces[task_id] = sw
+
+            sw = self._shadow_workspaces[task_id]
+            # 劫持路径参数
+            for path_key in ("path", "file_path", "cwd"):
+                if path_key in tool_input and tool_input[path_key]:
+                    original_val = tool_input[path_key]
+                    shadow_val = str(sw.resolve_path(original_val))
+                    tool_input[path_key] = shadow_val
+                    logger.info(f"[Shadow] Redirected {path_key}: {original_val} -> {shadow_val}")
+
         logger.info(f"Executing tool: {tool_name} with {tool_input}")
 
         # ★ 拦截 JSON 解析失败的工具调用（参数被 API 截断）

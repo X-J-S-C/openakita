@@ -76,6 +76,8 @@ from ..tools.handlers.plugins import create_handler as create_plugins_handler
 from ..tools.handlers.powershell import create_handler as create_powershell_handler
 from ..tools.handlers.profile import create_handler as create_profile_handler
 from ..tools.handlers.scheduled import create_handler as create_scheduled_handler
+from ..tools.handlers.evolution import create_handler as create_evolution_handler
+from ..tools.handlers.safety import create_handler as create_safety_handler
 from ..tools.handlers.search import create_handler as create_search_handler
 from ..tools.handlers.skill_store import create_handler as create_skill_store_handler
 from ..tools.handlers.skills import create_handler as create_skills_handler
@@ -511,12 +513,17 @@ class Agent:
         self._skill_watcher = None
 
         # 延迟导入自进化系统（避免循环导入）
-        from ..evolution.generator import SkillGenerator
+        from ..evolution import SuccessCrystallizer, SkillGenerator
 
         self.skill_generator = SkillGenerator(
             brain=self.brain,
             skills_dir=settings.skills_path,
             skill_registry=self.skill_registry,
+        )
+
+        self.success_crystallizer = SuccessCrystallizer(
+            brain=self.brain,
+            skills_dir=settings.skills_path
         )
 
         # MCP 系统（全局共享：mcp_client 和 mcp_catalog 为模块级单例，
@@ -540,7 +547,11 @@ class Agent:
             _all_tools.extend(_DT)
         from ..tools.definitions.agent import AGENT_TOOLS
         from ..tools.definitions.org_setup import ORG_SETUP_TOOLS
+        from ..tools.definitions.safety import SAFETY_TOOLS
+        from ..tools.definitions.evolution import EVOLUTION_TOOLS
 
+        _all_tools.extend(SAFETY_TOOLS)
+        _all_tools.extend(EVOLUTION_TOOLS)
         _all_tools.extend(AGENT_TOOLS)
         _all_tools.extend(ORG_SETUP_TOOLS)
         if opencli_available():
@@ -642,7 +653,11 @@ class Agent:
 
         from ..tools.definitions.agent import AGENT_TOOLS
         from ..tools.definitions.org_setup import ORG_SETUP_TOOLS
+        from ..tools.definitions.safety import SAFETY_TOOLS
+        from ..tools.definitions.evolution import EVOLUTION_TOOLS
 
+        self._tools.extend(SAFETY_TOOLS)
+        self._tools.extend(EVOLUTION_TOOLS)
         self._tools.extend(AGENT_TOOLS)
         self._tools.extend(ORG_SETUP_TOOLS)
         logger.info(
@@ -878,6 +893,23 @@ class Agent:
             for hint in intent_hints:
                 hint_names |= tool_groups.get(hint, set())
 
+        # Akita-Evo: L1-Trigger 注入。如果当前意图命中了 L1 索引，则强制解冻关联工具。
+        l1_promoted: set[str] = set()
+        if intent and hasattr(self.memory_manager, "markdown_syncer"):
+            # L1 Heuristic: 基于关键词的初级动态工具注入
+            intent_lower = intent.lower()
+            trigger_map = {
+                "search": {"web_search", "news_search", "search_memory"},
+                "browser": {"browser_navigate", "browser_screenshot", "browser_click"},
+                "execute": {"run_shell", "run_powershell"},
+                "file": {"read_file", "write_file", "edit_file", "list_directory"}
+            }
+            for kw, tools_to_inject in trigger_map.items():
+                if kw in intent_lower:
+                    l1_promoted |= tools_to_inject
+            if l1_promoted:
+                logger.info(f"[L1] Promoted tools based on intent: {l1_promoted}")
+
         deferred_count = 0
         for tool in tools:
             name = tool.get("name", "")
@@ -887,7 +919,7 @@ class Agent:
             tool.pop("_always_available", None)
             tool.pop("_promoted", None)
 
-            if name in discovered:
+            if name in discovered or name in l1_promoted:
                 tool["_promoted"] = True
                 continue
             if name in user_always_tools:
@@ -1508,6 +1540,12 @@ class Agent:
         if settings.hub_enabled:
             self.handler_registry.register("agent_hub", create_agent_hub_handler(self))
             self.handler_registry.register("skill_store", create_skill_store_handler(self))
+
+        # 安全申诉
+        self.handler_registry.register("safety", create_safety_handler(self))
+
+        # 技能进化管理
+        self.handler_registry.register("evolution", create_evolution_handler(self))
 
         # PowerShell（仅 Windows 平台注册）
         import platform
@@ -4258,6 +4296,7 @@ class Agent:
         session: Any,
         session_id: str,
         task_monitor: "TaskMonitor",
+        task_description: str = "",
     ) -> None:
         """
         会话流水线 - 共享收尾阶段。
@@ -4348,6 +4387,91 @@ class Agent:
             except Exception as e:
                 logger.debug(f"[Session:{session_id}] memory end_session failed: {e}")
 
+            # Akita-Evo: 影子执行提交 (Commit Shadow Workspace)
+            if exit_reason == "normal" and not is_sub_agent:
+                conversation_id = getattr(self, "_current_conversation_id", "") or session_id
+                task_id = "global"
+                if self.agent_state and self.agent_state.current_task:
+                    task_id = self.agent_state.current_task.task_id
+
+                if hasattr(self.tool_executor, "_shadow_workspaces") and task_id in self.tool_executor._shadow_workspaces:
+                    sw = self.tool_executor._shadow_workspaces[task_id]
+                    try:
+                        # TODO: 在此处可以加入 AuditorNode 最终审查
+                        await sw.commit()
+                        logger.info(f"[Shadow] Successfully committed changes for task {task_id}")
+                    except Exception as sw_err:
+                        logger.error(f"[Shadow] Failed to commit changes: {sw_err}")
+
+            # [Evolution] 技能结晶：如果任务成功且有 trace，尝试转化为持久化技能
+            if (
+                settings.evolution_enabled
+                and exit_reason == "normal"
+                and _trace_snapshot
+                and not is_sub_agent
+            ):
+                # 异步执行，不阻塞会话结束
+                async def _background_crystallize():
+                    try:
+                        # 确定任务描述
+                        eff_task_desc = task_description or (getattr(self, "_current_task_query", "") or "").strip()
+                        if not eff_task_desc:
+                            eff_task_desc = self._get_last_user_request(_trace_snapshot)
+
+                        # 只有足够复杂的任务（如超过 2 种不同工具调用）才值得结晶
+                        unique_tools = set()
+                        for it in _trace_snapshot:
+                            for tc in it.get("tool_calls", []):
+                                unique_tools.add(tc.get("name"))
+
+                        if len(unique_tools) >= 2:
+                            # 询问用户或完全自动
+                            if not settings.evolution_auto_approve:
+                                logger.info(f"[Evolution] 发现可结晶技能，已暂存至待审核队列: {eff_task_desc[:30]}")
+
+                            res = await self.success_crystallizer.crystallize(eff_task_desc, _trace_snapshot)
+                            if res.success:
+                                logger.info(f"[Evolution] New skill crystallized: {res.skill_name}")
+                                # 刷新技能注册表以便立即发现
+                                self.propagate_skill_change(action="crystallize", rescan=True)
+
+                                # [Git] 自动提交结晶成果 (安全调用)
+                                try:
+                                    from ..utils.worktree import _run_git
+                                    commit_msg = f"feat(skill): crystallized skill '{res.skill_name}' from task ID {session_id[:8]}"
+                                    commit_msg += f"\n\n任务: {eff_task_desc[:100]}\n自动结晶自成功执行轨迹。"
+
+                                    # 使用 subprocess_exec 避免 shell 注入
+                                    # [SOP 版本化] 使用独立分支进行结晶提交，方便对比与回滚
+                                    branch_name = f"evo/skill-{res.skill_name}"
+                                    await _run_git(["checkout", "-b", branch_name])
+                                    await _run_git(["add", res.skill_dir])
+                                    await _run_git(["commit", "-m", commit_msg])
+                                    # 切回主分支（或保持，视用户工作流而定）
+                                    await _run_git(["checkout", "-"])
+                                    logger.info(f"[Git] Skill crystallized and committed to branch: {branch_name}")
+
+                                    # [Distillation] 导出蒸馏数据
+                                    try:
+                                        from ..evolution.distillation import DistillationExporter
+                                        exporter = DistillationExporter(settings.project_root / "data")
+                                        exporter.export_alignment_data(
+                                            task_id=session_id,
+                                            task_desc=eff_task_desc,
+                                            trace=_trace_snapshot,
+                                            skill_content=res.skill_content
+                                        )
+                                    except Exception as d_err:
+                                        logger.debug(f"[Distillation] Export failed: {d_err}")
+
+                                except Exception as g_err:
+                                    logger.debug(f"[Git] Auto-commit failed: {g_err}")
+
+                    except Exception as exc:
+                        logger.debug(f"[Evolution] Crystallization failed: {exc}")
+
+                asyncio.create_task(_background_crystallize())
+
         # 5. Cleanup（总是执行，放在 finally 中由调用方保证）
         # 注意：此方法不做 cleanup，cleanup 统一在 _cleanup_session_state() 中
 
@@ -4398,6 +4522,14 @@ class Agent:
             pass
         if hasattr(self, "tool_executor") and hasattr(self.tool_executor, "_pending_confirms"):
             self.tool_executor._pending_confirms.clear()
+
+        # Akita-Evo: 清理影子工作区
+        if hasattr(self.tool_executor, "_shadow_workspaces"):
+            for _task_id in list(self.tool_executor._shadow_workspaces.keys()):
+                sw = self.tool_executor._shadow_workspaces.pop(_task_id)
+                # 只有非正常退出的才尝试 rollback，正常 commit 的在上面已经做过了
+                # 此处统一由 finally 保证物理目录清理（如果需要）
+                # 生产环境建议保留以便审计，或者异步清理
 
         # Clean up task-local session references to prevent dict growth
         if _sid:
@@ -4703,6 +4835,7 @@ class Agent:
                 session=session,
                 session_id=session_id,
                 task_monitor=task_monitor,
+                task_description=message
             )
 
             # fast_reply 不经过 ReasoningEngine，trace 为空导致 _last_usage_summary = {}。

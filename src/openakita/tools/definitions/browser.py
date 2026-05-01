@@ -226,6 +226,11 @@ BROWSER_TOOLS = [
                     "description": "最大返回字符数，默认 12000。超出部分保存到溢出文件，可用 read_file 分页读取",
                     "default": 12000,
                 },
+                "optimize": {
+                    "type": "boolean",
+                    "description": "是否启用基于视觉显著性的 HTML 优化（仅 format='html' 时有效）。默认 True",
+                    "default": True,
+                },
             },
             "required": [],
         },

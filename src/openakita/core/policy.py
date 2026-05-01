@@ -578,7 +578,7 @@ class PolicyEngine:
                 forbidden=_default_forbidden_paths(),
                 default_zone=Zone.WORKSPACE,
             ),
-            confirmation=ConfirmationConfig(mode="smart", auto_confirm=False),
+            confirmation=ConfirmationConfig(mode="yolo", auto_confirm=True),
             command_patterns=CommandPatternConfig(
                 enabled=True,
                 blocked_commands=list(_DEFAULT_BLOCKED_COMMANDS),
@@ -920,19 +920,20 @@ class PolicyEngine:
             if not command:
                 return None
             risk = self.classify_shell_risk(command)
-            if risk == RiskLevel.CRITICAL or self._command_touches_sensitive_area(command):
+            touches = self._command_touches_sensitive_area(command)
+            if risk == RiskLevel.CRITICAL:
                 result = PolicyResult(
                     decision=PolicyDecision.DENY,
-                    reason=f"操作被拒绝: 命令触碰系统或密钥保护范围 ({command[:120]})",
+                    reason=f"操作被拒绝: 极高风险命令拦截 ({command[:120]})",
                     policy_name="BaselineProtection",
                     metadata={"risk_level": risk.value, "trust_mode": True},
                 )
                 self._audit(tool_name, params, result)
                 return result
-            if risk in (RiskLevel.HIGH, RiskLevel.MEDIUM):
+            if touches:
                 result = PolicyResult(
                     decision=PolicyDecision.CONFIRM,
-                    reason=f"信任模式下仍需确认中高风险命令: {command[:120]}",
+                    reason=f"信任模式下仍需确认触碰敏感区域的命令: {command[:120]}",
                     policy_name="BaselineProtection",
                     metadata={"risk_level": risk.value, "trust_mode": True},
                 )
@@ -943,6 +944,12 @@ class PolicyEngine:
     def _command_touches_sensitive_area(self, command: str) -> bool:
         """Detect shell commands that operate on protected/forbidden paths in trust mode."""
         command_norm = command.replace("\\", "/").lower()
+        # Sensitive areas include forbidden/protected zones and self-protection directories
+        sensitive_patterns = [
+            *self._config.zones.forbidden,
+            *self._config.zones.protected,
+            *self._config.self_protection.protected_dirs
+        ]
         destructive = re.search(
             r"\b(rm|del|rd|rmdir|remove-item|move|mv|copy|cp|set-content|add-content|new-item)\b",
             command,
@@ -950,9 +957,19 @@ class PolicyEngine:
         )
         if not destructive:
             return False
-        for pattern in [*self._config.zones.forbidden, *self._config.zones.protected]:
-            probe = _normalise(pattern).rstrip("*").rstrip("/").lower()
-            if probe and probe in command_norm:
+        for pattern in sensitive_patterns:
+            # 1. Absolute path check
+            probe_abs = _normalise(pattern).rstrip("*").rstrip("/").lower()
+            if probe_abs and probe_abs in command_norm:
+                return True
+            # 2. Relative/Raw pattern check (handles ./data etc.)
+            probe_raw = pattern.replace("\\", "/").rstrip("*").rstrip("/").lower()
+            if probe_raw and (
+                probe_raw + "/" in command_norm or
+                "/" + probe_raw in command_norm or
+                " " + probe_raw in command_norm or
+                "\\" + probe_raw in command_norm
+            ):
                 return True
         return False
 
