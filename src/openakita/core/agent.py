@@ -511,12 +511,17 @@ class Agent:
         self._skill_watcher = None
 
         # 延迟导入自进化系统（避免循环导入）
-        from ..evolution.generator import SkillGenerator
+        from ..evolution import SuccessCrystallizer, SkillGenerator
 
         self.skill_generator = SkillGenerator(
             brain=self.brain,
             skills_dir=settings.skills_path,
             skill_registry=self.skill_registry,
+        )
+
+        self.success_crystallizer = SuccessCrystallizer(
+            brain=self.brain,
+            skills_dir=settings.skills_path
         )
 
         # MCP 系统（全局共享：mcp_client 和 mcp_catalog 为模块级单例，
@@ -4347,6 +4352,33 @@ class Agent:
                 logger.debug(f"[Session:{session_id}] memory_manager.end_session() called")
             except Exception as e:
                 logger.debug(f"[Session:{session_id}] memory end_session failed: {e}")
+
+            # [Evolution] 技能结晶：如果任务成功且有 trace，尝试转化为持久化技能
+            if exit_reason == "normal" and _trace_snapshot and not is_sub_agent:
+                # 异步执行，不阻塞会话结束
+                async def _background_crystallize():
+                    try:
+                        task_desc = (getattr(self, "_current_task_query", "") or "").strip()
+                        if not task_desc:
+                            # 兜底：从消息中提取
+                            task_desc = self._get_last_user_request(_trace_snapshot)
+
+                        # 只有足够复杂的任务（如超过 3 步工具调用）才值得结晶
+                        unique_tools = set()
+                        for it in _trace_snapshot:
+                            for tc in it.get("tool_calls", []):
+                                unique_tools.add(tc.get("name"))
+
+                        if len(unique_tools) >= 2:
+                            res = await self.success_crystallizer.crystallize(task_desc, _trace_snapshot)
+                            if res.success:
+                                logger.info(f"[Evolution] New skill crystallized: {res.skill_name}")
+                                # 刷新技能注册表以便立即发现
+                                self.propagate_skill_change(action="crystallize", rescan=True)
+                    except Exception as exc:
+                        logger.debug(f"[Evolution] Crystallization failed: {exc}")
+
+                asyncio.create_task(_background_crystallize())
 
         # 5. Cleanup（总是执行，放在 finally 中由调用方保证）
         # 注意：此方法不做 cleanup，cleanup 统一在 _cleanup_session_state() 中
