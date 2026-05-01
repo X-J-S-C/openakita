@@ -31,5 +31,18 @@ SAFETY_TOOLS = [
             },
             "required": ["target_action", "necessity_reasoning", "mitigation_measures"],
         },
+    },
+    {
+        "name": "check_safety_policy",
+        "category": "System",
+        "description": "Simulate an operation (tool call or path access) to check if it would be blocked by AuditorNode or L0 rules. Useful for debugging safety boundaries.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "tool_name": {"type": "string", "description": "要模拟的工具名"},
+                "tool_input": {"type": "object", "description": "要模拟的输入参数"},
+            },
+            "required": ["tool_name", "tool_input"],
+        },
     }
 ]

@@ -42,6 +42,8 @@ class SuccessCrystallizer:
         self.brain = brain
         self.skills_dir = skills_dir or settings.skills_path
         self.skills_dir.mkdir(parents=True, exist_ok=True)
+        self.pending_dir = settings.project_root / "data" / "evolution" / "pending"
+        self.pending_dir.mkdir(parents=True, exist_ok=True)
 
     async def crystallize(self, task_description: str, react_trace: list[dict]) -> CrystallizationResult:
         """
@@ -69,9 +71,12 @@ class SuccessCrystallizer:
             if not skill_content:
                 return CrystallizationResult(success=False, skill_name=skill_name, error="生成内容为空")
 
-            # 3. 确定存储路径
+            # 3. 确定存储路径 (根据审批设置决定是否存入 pending)
             safe_name = self._normalize_skill_name(skill_name)
-            skill_path = self.skills_dir / safe_name
+            auto_approve = getattr(settings, "evolution_auto_approve", False)
+
+            target_dir = self.skills_dir if auto_approve else self.pending_dir
+            skill_path = target_dir / safe_name
             skill_path.mkdir(exist_ok=True)
 
             # 4. [Dry-Run] 自动演练验证 (可选)

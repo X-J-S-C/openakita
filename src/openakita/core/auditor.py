@@ -29,8 +29,9 @@ class AuditResult:
 class AuditorNode:
     """审计节点。"""
 
-    def __init__(self, l0_rules: Any):
+    def __init__(self, l0_rules: Any, brain: Any = None):
         self.l0_rules = l0_rules
+        self.brain = brain
 
     def pre_audit(self, tool_name: str, tool_input: dict) -> AuditResult:
         """执行前预审。"""
@@ -55,6 +56,9 @@ class AuditorNode:
                 reason=f"L0 Rule Violation: {rule.permission} on {rule.pattern}",
                 requires_defense=True
             )
+
+        # 3. 如果是 L2 及以上风险，可引入 LLM 二次确认 (Hybrid Mode)
+        # TODO: 未来对接 self.brain.think_lightweight 进行语义审计
 
         return AuditResult(allowed=True, risk_level=level)
 

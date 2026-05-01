@@ -173,7 +173,8 @@ class ToolExecutor:
         # Akita-Evo: AuditorNode
         from .auditor import AuditorNode
         from .permission import L0_RULESET
-        self._auditor = AuditorNode(L0_RULESET)
+        # 传递 brain 以支持混合审计
+        self._auditor = AuditorNode(L0_RULESET, brain=self._agent_ref.brain if self._agent_ref else None)
 
         # Extra permission rules injected by AgentFactory (profile rules)
         self._extra_permission_rules: list | None = None

@@ -127,8 +127,8 @@ class BrowserHandler:
                     from ..browser.simphtml import JS_OPT_HTML, optimize_html_for_tokens
 
                     # 优先通过浏览器执行 JS 获取简化后的 DOM
-                    pw = self.agent.pw_tools
-                    js_res = await pw.execute_js(f"{JS_OPT_HTML}\nreturn optHTML();")
+                    pw = getattr(self.agent, "pw_tools", None)
+                    js_res = await pw.execute_js(f"{JS_OPT_HTML}\nreturn optHTML();") if pw else {"success": False}
 
                     if js_res.get("success"):
                         raw_html = js_res.get("result", "")

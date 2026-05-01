@@ -609,6 +609,9 @@ class Settings(BaseSettings):
     evolution_auto_approve: bool = Field(default=False, description="是否完全自动进阶（True=无需人工审核）")
     evolution_dry_run: bool = Field(default=False, description="是否在结晶后进行自动演练验证")
 
+    # === 审计模型配置 ===
+    auditor_model: str = Field(default="claude-3-haiku", description="审计专用的轻量级模型")
+
     # === 组织编排 · 任务链终止防护 ===
     # 这组开关用于防止：
     # 1) 同一 chain 被重复交付/验收导致附件与交付物重复；

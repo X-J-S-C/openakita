@@ -76,6 +76,7 @@ from ..tools.handlers.plugins import create_handler as create_plugins_handler
 from ..tools.handlers.powershell import create_handler as create_powershell_handler
 from ..tools.handlers.profile import create_handler as create_profile_handler
 from ..tools.handlers.scheduled import create_handler as create_scheduled_handler
+from ..tools.handlers.evolution import create_handler as create_evolution_handler
 from ..tools.handlers.safety import create_handler as create_safety_handler
 from ..tools.handlers.search import create_handler as create_search_handler
 from ..tools.handlers.skill_store import create_handler as create_skill_store_handler
@@ -547,8 +548,10 @@ class Agent:
         from ..tools.definitions.agent import AGENT_TOOLS
         from ..tools.definitions.org_setup import ORG_SETUP_TOOLS
         from ..tools.definitions.safety import SAFETY_TOOLS
+        from ..tools.definitions.evolution import EVOLUTION_TOOLS
 
         _all_tools.extend(SAFETY_TOOLS)
+        _all_tools.extend(EVOLUTION_TOOLS)
         _all_tools.extend(AGENT_TOOLS)
         _all_tools.extend(ORG_SETUP_TOOLS)
         if opencli_available():
@@ -651,8 +654,10 @@ class Agent:
         from ..tools.definitions.agent import AGENT_TOOLS
         from ..tools.definitions.org_setup import ORG_SETUP_TOOLS
         from ..tools.definitions.safety import SAFETY_TOOLS
+        from ..tools.definitions.evolution import EVOLUTION_TOOLS
 
         self._tools.extend(SAFETY_TOOLS)
+        self._tools.extend(EVOLUTION_TOOLS)
         self._tools.extend(AGENT_TOOLS)
         self._tools.extend(ORG_SETUP_TOOLS)
         logger.info(
@@ -888,6 +893,14 @@ class Agent:
             for hint in intent_hints:
                 hint_names |= tool_groups.get(hint, set())
 
+        # Akita-Evo: L1-Trigger 注入。如果当前意图命中了 L1 索引，则强制解冻关联工具。
+        l1_promoted: set[str] = set()
+        if intent and hasattr(self.memory_manager, "markdown_syncer"):
+            # TODO: 未来实现更复杂的 L1 匹配算法
+            # 目前简化：如果任务描述中包含某些关键词，则加载对应工具
+            # 这里是 Tiered Tool Injection 的核心挂载点
+            pass
+
         deferred_count = 0
         for tool in tools:
             name = tool.get("name", "")
@@ -897,7 +910,7 @@ class Agent:
             tool.pop("_always_available", None)
             tool.pop("_promoted", None)
 
-            if name in discovered:
+            if name in discovered or name in l1_promoted:
                 tool["_promoted"] = True
                 continue
             if name in user_always_tools:
@@ -1521,6 +1534,9 @@ class Agent:
 
         # 安全申诉
         self.handler_registry.register("safety", create_safety_handler(self))
+
+        # 技能进化管理
+        self.handler_registry.register("evolution", create_evolution_handler(self))
 
         # PowerShell（仅 Windows 平台注册）
         import platform
@@ -4402,17 +4418,7 @@ class Agent:
                         if len(unique_tools) >= 2:
                             # 询问用户或完全自动
                             if not settings.evolution_auto_approve:
-                                logger.info(f"[Evolution] 准备为任务结晶技能，等待用户审核: {eff_task_desc[:30]}")
-                                # 使用本 Agent 的交互机制请求用户审批
-                                # 在后台任务中调用交互工具需要谨慎，此处暂采用简单的确认机制
-                                confirm_msg = f"检测到任务「{eff_task_desc[:20]}...」执行成功，是否将其结晶为新技能？(y/n)"
-                                # 模拟一键审核：在 CLI 环境下由于是异步后台，建议通过 Task 状态或专门的审批流
-                                # 此处为满足用户“一键审核”要求，引入配置检查
-                                if not settings.evolution_auto_approve:
-                                    # 暂时仅记录日志，等待未来 IM 审批流对接
-                                    # 为确保逻辑正确，如果未开启 auto_approve 且没有实时交互手段，先跳过执行
-                                    logger.info("[Evolution] 审核流暂未对接，请开启 EVOLUTION_AUTO_APPROVE=true 以启用自动结晶。")
-                                    return
+                                logger.info(f"[Evolution] 发现可结晶技能，已暂存至待审核队列: {eff_task_desc[:30]}")
 
                             res = await self.success_crystallizer.crystallize(eff_task_desc, _trace_snapshot)
                             if res.success:

@@ -63,5 +63,6 @@ async def test_crystallize_success(mock_brain, tmp_path):
 
     assert result.success is True
     assert result.skill_name == "test-skill"
-    assert (tmp_path / "test-skill" / "SKILL.md").exists()
-    assert "# Test Skill" in (tmp_path / "test-skill" / "SKILL.md").read_text()
+    # 由于默认不开启 auto_approve，应该存入 pending 目录
+    assert (crystallizer.pending_dir / "test-skill" / "SKILL.md").exists()
+    assert "# Test Skill" in (crystallizer.pending_dir / "test-skill" / "SKILL.md").read_text()
