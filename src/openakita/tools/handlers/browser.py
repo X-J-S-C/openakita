@@ -121,6 +121,17 @@ class BrowserHandler:
             output = f"❌ {result.get('error', '未知错误')}"
 
         if actual_tool_name == "browser_get_content":
+            # 集成 SimpHTML 优化
+            if params.get("format") == "html" and params.get("optimize", True):
+                try:
+                    from ..browser.simphtml import optimize_html_for_tokens
+                    # output 包含 "✅ " 前缀，需要先剥离
+                    raw_html = output[2:] if output.startswith("✅ ") else output
+                    optimized = optimize_html_for_tokens(raw_html, max_chars=params.get("max_length", self.CONTENT_DEFAULT_MAX_LENGTH))
+                    output = f"✅ {optimized}"
+                except Exception as e:
+                    logger.warning(f"SimpHTML optimization failed: {e}")
+
             output = self._maybe_truncate(output, params)
 
         # browser_screenshot: 自动附带图片内容（如果模型支持 vision）

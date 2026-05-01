@@ -131,28 +131,36 @@ class SuccessCrystallizer:
 
     async def _generate_skill_definition(self, task: str, trace: list[dict]) -> dict:
         """调用 LLM 生成 SKILL.md"""
-        prompt = f"""你是一个高级 AI 架构师。请分析以下成功的任务执行记录，并将其固化为一个通用的 `SKILL.md` 技能定义。
+        # 优先使用结晶专用强模型 DeepSeek-V4-Pro (如果配置了)
+        evo_model = getattr(settings, "evolution_model", "deepseek-v4-pro")
+
+        prompt = f"""你是一个高级 AI 架构师，擅长将零散的行动轨迹结晶为标准化的 SOP。
+请分析以下成功的任务执行记录，提炼出一个高复用性的 `SKILL.md` 技能定义。
 
 ### 原始任务
 {task}
 
-### 执行路径 (精简 Trace)
+### 成功执行路径 (已剔除失败尝试)
 {json.dumps(trace, ensure_ascii=False, indent=2)}
 
-### 要求
-1. **提炼 SOP**：不要死板记录这次的具体参数，要提炼出完成这类任务的通用步骤。
-2. **规范格式**：必须符合 OpenAkita 的 SKILL.md 规范，包含 frontmatter (name, description) 和 Instructions。
-3. **命名**：起一个简洁、专业、以连字符分隔的英文名称（如 `aws-s3-manager`）。
-4. **实用性**：Instructions 应该清晰到让另一个 Agent 看完就能复现成功路径。
+### 结晶规范
+1. **抽象化**：从具体参数中提取模式。例如把 "git clone https://repo.com" 抽象为 "获取源码仓库"。
+2. **SKILL.md 结构**：
+   - `name`: 机器可读的唯一标识（kebab-case）。
+   - `description`: 简单说明此技能解决什么问题。
+   - `instructions`: 核心部分。列出关键步骤、必要的工具调用、以及在这个任务中发现的“避坑指南”。
+3. **验证点**：指出在执行过程中，如何判断每一步是否成功。
 
-请直接返回 JSON 格式结果：
+请直接返回 JSON 格式：
 {{
-  "name": "技能名称",
-  "content": "完整的 SKILL.md 内容"
+  "name": "skill-id",
+  "display_name": "中文名称",
+  "description": "简要描述",
+  "content": "完整的 Markdown 内容"
 }}
 """
 
-        response = await self.brain.think(prompt, system="你只负责输出结构化 JSON。")
+        response = await self.brain.think(prompt, system="你是一个技能结晶专家，严禁废话，只输出 JSON。", model_override=evo_model)
 
         # 解析 JSON
         try:
