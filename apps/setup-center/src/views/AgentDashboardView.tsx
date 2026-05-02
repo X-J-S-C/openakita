@@ -419,10 +419,11 @@ export function AgentDashboardView({
       }
 
       const t = now();
+      const hasRunning = Array.from(simNodesRef.current.values()).some(
+        (n) => n.status === "running",
+      );
       const isDragging = !!dragRef.current;
-      // Simulation constants below assume roughly 60Hz fixed-step rendering.
-      // Capping to 24/30fps makes the entire dashboard feel like slow motion.
-      const targetInterval = isDragging ? 0 : 1 / 60;
+      const targetInterval = isDragging ? 0 : hasRunning ? 1 / 30 : 1 / 24;
       if (t - lastFrameTimeRef.current < targetInterval) {
         animRef.current = requestAnimationFrame(step);
         return;

@@ -23,9 +23,7 @@
     options = options || {};
     var url = path;
     if (meta.apiBase && !/^https?:\/\//.test(path)) {
-      var cleanPath = path.replace(/^\//, "");
-      var prefix = cleanPath.indexOf("api/") === 0 ? "" : "api/plugins/" + encodeURIComponent(meta.pluginId || "word-maker") + "/";
-      url = meta.apiBase.replace(/\/$/, "") + "/" + prefix + cleanPath;
+      url = meta.apiBase.replace(/\/$/, "") + "/" + path.replace(/^\//, "");
     }
     return fetch(url, {
       method: options.method || "GET",
