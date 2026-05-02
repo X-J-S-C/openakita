@@ -14,10 +14,11 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 if TYPE_CHECKING:
-    from .context import KernelContext, KernelResult
-    from .plan import Plan, PlanStep
-    from .memory import Memory, MemoryQuery
-    from .tools import Tool, ToolCall, ToolResult
+    from .context import KernelContext
+    from .ports.memory import MemoryPort
+    from .ports.tools import ToolPort, ToolCall
+    from .ports.model import ModelPort
+    from .ports.skills import SkillPort
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,45 @@ class StateMachine(ABC, Generic[TState]):
         pass
 
 
+@dataclass
+class KernelConfig:
+    """内核配置"""
+    max_iterations: int = 100
+    max_planning_time_seconds: float = 30.0
+    checkpoint_interval: int = 10
+    enable_reflection: bool = True
+    enable_self_correction: bool = True
+    tool_timeout_seconds: float = 60.0
+    user_confirm_threshold: float = 0.8
+
+
+@dataclass
+class Task:
+    """任务定义"""
+    id: str
+    description: str
+    context: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=datetime.now)
+    priority: int = 0
+
+    @property
+    def is_valid(self) -> bool:
+        return bool(self.description.strip())
+
+
+@dataclass
+class CheckpointData:
+    """检查点数据"""
+    kernel_name: str
+    status: str
+    task_id: str
+    iteration: int
+    state_snapshot: dict[str, Any]
+    timestamp: datetime = field(default_factory=datetime.now)
+    version: str = "1.0"
+
+
 class AgentKernel(ABC):
     """
     Agent 执行内核 - 六边形架构核心
@@ -86,6 +126,10 @@ class AgentKernel(ABC):
         self._status = AgentStatus.IDLE
         self._event_handlers: dict[str, list[callable]] = {}
         self._initialized = False
+        self._memory_port: "MemoryPort | None" = None
+        self._tool_port: "ToolPort | None" = None
+        self._model_port: "ModelPort | None" = None
+        self._skill_port: "SkillPort | None" = None
 
     @property
     def status(self) -> AgentStatus:
@@ -107,7 +151,7 @@ class AgentKernel(ABC):
         pass
 
     @abstractmethod
-    async def run(self, task: Task, context: KernelContext) -> KernelResult:
+    async def run(self, task: Task, context: "KernelContext") -> "KernelResult":
         """
         执行任务的主入口
 
@@ -121,7 +165,7 @@ class AgentKernel(ABC):
         pass
 
     @abstractmethod
-    async def plan(self, goal: str, context: KernelContext) -> Plan:
+    async def plan(self, goal: str, context: "KernelContext") -> "Plan":
         """
         任务规划
 
@@ -135,7 +179,7 @@ class AgentKernel(ABC):
         pass
 
     @abstractmethod
-    async def execute_step(self, step: PlanStep, context: KernelContext) -> StepResult:
+    async def execute_step(self, step: "PlanStep", context: "KernelContext") -> "StepResult":
         """
         执行单个步骤
 
@@ -149,7 +193,7 @@ class AgentKernel(ABC):
         pass
 
     @abstractmethod
-    async def reflect(self, result: StepResult, context: KernelContext) -> Reflection:
+    async def reflect(self, result: "StepResult", context: "KernelContext") -> "Reflection":
         """
         反思执行结果
 
@@ -202,68 +246,6 @@ class AgentKernel(ABC):
         pass
 
 
-@dataclass
-class KernelConfig:
-    """内核配置"""
-    max_iterations: int = 100
-    max_planning_time_seconds: float = 30.0
-    checkpoint_interval: int = 10
-    enable_reflection: bool = True
-    enable_self_correction: bool = True
-    tool_timeout_seconds: float = 60.0
-    user_confirm_threshold: float = 0.8
-
-
-@dataclass
-class Task:
-    """任务定义"""
-    id: str
-    description: str
-    context: dict[str, Any] = field(default_factory=dict)
-    metadata: dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=datetime.now)
-    priority: int = 0
-
-    @property
-    def is_valid(self) -> bool:
-        return bool(self.description.strip())
-
-
-@dataclass
-class StepResult:
-    """步骤执行结果"""
-    step: PlanStep
-    success: bool
-    output: Any = None
-    error: str | None = None
-    tool_results: list[ToolResult] = field(default_factory=list)
-    execution_time_ms: float = 0.0
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class Reflection:
-    """反思结果"""
-    result: StepResult
-    quality_score: float
-    issues: list[str] = field(default_factory=list)
-    improvements: list[str] = field(default_factory=list)
-    should_retry: bool = False
-    next_steps: list[str] = field(default_factory=list)
-
-
-@dataclass
-class CheckpointData:
-    """检查点数据"""
-    kernel_name: str
-    status: str
-    task_id: str
-    iteration: int
-    state_snapshot: dict[str, Any]
-    timestamp: datetime = field(default_factory=datetime.now)
-    version: str = "1.0"
-
-
 class KernelPort(ABC):
     """
     内核端口 - 用于测试和模拟
@@ -282,7 +264,7 @@ class KernelPort(ABC):
         pass
 
     @abstractmethod
-    async def run(self, task: Task, context: KernelContext) -> KernelResult:
+    async def run(self, task: Task, context: "KernelContext") -> "KernelResult":
         pass
 
     @abstractmethod
@@ -329,25 +311,25 @@ class KernelContextBuilder:
     """内核上下文构建器"""
 
     def __init__(self):
-        self._memory_port: MemoryPort | None = None
-        self._tool_port: ToolPort | None = None
-        self._model_port: ModelPort | None = None
-        self._skill_port: SkillPort | None = None
+        self._memory_port: "MemoryPort | None" = None
+        self._tool_port: "ToolPort | None" = None
+        self._model_port: "ModelPort | None" = None
+        self._skill_port: "SkillPort | None" = None
         self._metadata: dict[str, Any] = {}
 
-    def with_memory(self, port: MemoryPort) -> "KernelContextBuilder":
+    def with_memory(self, port: "MemoryPort") -> "KernelContextBuilder":
         self._memory_port = port
         return self
 
-    def with_tools(self, port: ToolPort) -> "KernelContextBuilder":
+    def with_tools(self, port: "ToolPort") -> "KernelContextBuilder":
         self._tool_port = port
         return self
 
-    def with_model(self, port: ModelPort) -> "KernelContextBuilder":
+    def with_model(self, port: "ModelPort") -> "KernelContextBuilder":
         self._model_port = port
         return self
 
-    def with_skills(self, port: SkillPort) -> "KernelContextBuilder":
+    def with_skills(self, port: "SkillPort") -> "KernelContextBuilder":
         self._skill_port = port
         return self
 
@@ -355,7 +337,7 @@ class KernelContextBuilder:
         self._metadata[key] = value
         return self
 
-    def build(self) -> KernelContext:
+    def build(self) -> "KernelContext":
         from .context import KernelContext
         return KernelContext(
             memory=self._memory_port,
@@ -366,15 +348,7 @@ class KernelContextBuilder:
         )
 
 
-from .memory import MemoryPort, Memory, MemoryQuery
-from .tools import ToolPort, Tool, ToolCall, ToolResult
-from .model import ModelPort
-from .skills import SkillPort
-from .context import KernelContext
-from .plan import Plan, PlanStep
-
-
-AgentFactory.register("ralph", RalphKernel)
+AgentFactory.register("ralph", None)
 
 
 class RalphKernel(AgentKernel):
@@ -395,8 +369,10 @@ class RalphKernel(AgentKernel):
         logger.info(f"[RalphKernel] Initializing {self.name}")
         self._initialized = True
 
-    async def run(self, task: Task, context: KernelContext) -> KernelResult:
+    async def run(self, task: Task, context: "KernelContext") -> "KernelResult":
         """执行 Ralph 循环"""
+        from .context import KernelResult
+
         if not self._initialized:
             await self.initialize()
 
@@ -441,8 +417,11 @@ class RalphKernel(AgentKernel):
         self._set_status(AgentStatus.COMPLETED)
         return KernelResult(success=True, iterations=len(plan.steps))
 
-    async def plan(self, goal: str, context: KernelContext) -> Plan:
+    async def plan(self, goal: str, context: "KernelContext") -> "Plan":
         """生成执行计划"""
+        from .context import Plan
+        from .plan import PlanStep
+
         if self._model_port is None:
             return Plan(steps=[PlanStep(id="1", description=goal, action="execute")])
 
@@ -456,8 +435,10 @@ class RalphKernel(AgentKernel):
         steps = self._parse_plan_response(response.text)
         return Plan(steps=steps)
 
-    def _parse_plan_response(self, response: str) -> list[PlanStep]:
+    def _parse_plan_response(self, response: str) -> list["PlanStep"]:
         """解析计划响应"""
+        from .plan import PlanStep
+
         steps = []
         for i, line in enumerate(response.split("\n"), 1):
             line = line.strip()
@@ -469,9 +450,9 @@ class RalphKernel(AgentKernel):
                 ))
         return steps if steps else [PlanStep(id="1", description=response, action="execute")]
 
-    async def execute_step(self, step: PlanStep, context: KernelContext) -> StepResult:
+    async def execute_step(self, step: "PlanStep", context: "KernelContext") -> "StepResult":
         """执行单个步骤"""
-        from datetime import datetime
+        from .context import StepResult
         import time
 
         start_time = time.time()
@@ -511,12 +492,14 @@ class RalphKernel(AgentKernel):
             execution_time_ms=(time.time() - start_time) * 1000,
         )
 
-    def _parse_tool_calls(self, action: str) -> list[ToolCall]:
+    def _parse_tool_calls(self, action: str) -> list["ToolCall"]:
         """解析工具调用"""
         return []
 
-    async def reflect(self, result: StepResult, context: KernelContext) -> Reflection:
+    async def reflect(self, result: "StepResult", context: "KernelContext") -> "Reflection":
         """反思执行结果"""
+        from .context import Reflection
+
         if not result.success:
             return Reflection(
                 result=result,
@@ -549,3 +532,6 @@ class RalphKernel(AgentKernel):
         """优雅关闭"""
         logger.info(f"[RalphKernel] Shutting down {self.name}")
         self._set_status(AgentStatus.IDLE)
+
+
+AgentFactory._registry["ralph"] = RalphKernel

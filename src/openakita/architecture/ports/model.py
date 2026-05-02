@@ -74,6 +74,16 @@ class ToolCallResult:
 
 
 @dataclass
+class ModelUsage:
+    """模型使用量"""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+
+
+@dataclass
 class ModelResponse:
     """模型响应"""
     content: str
@@ -90,16 +100,6 @@ class ModelResponse:
     @property
     def text(self) -> str:
         return self.content
-
-
-@dataclass
-class ModelUsage:
-    """模型使用量"""
-    input_tokens: int = 0
-    output_tokens: int = 0
-    total_tokens: int = 0
-    cache_read_tokens: int = 0
-    cache_write_tokens: int = 0
 
 
 @dataclass

@@ -114,6 +114,29 @@ class KernelResult:
 
 
 @dataclass
+class StepResult:
+    """步骤执行结果"""
+    step: "PlanStep" = None
+    success: bool = False
+    output: Any = None
+    error: str | None = None
+    tool_results: list[Any] = field(default_factory=list)
+    execution_time_ms: float = 0.0
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class Reflection:
+    """反思结果"""
+    result: StepResult = None
+    quality_score: float = 0.0
+    issues: list[str] = field(default_factory=list)
+    improvements: list[str] = field(default_factory=list)
+    should_retry: bool = False
+    next_steps: list[str] = field(default_factory=list)
+
+
+@dataclass
 class ExecutionTrace:
     """执行追踪"""
     task_id: str

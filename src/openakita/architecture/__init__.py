@@ -13,11 +13,31 @@ from .kernel import (
     AgentEvent,
     Task,
     KernelConfig,
+    CheckpointData,
+)
+
+from .context import (
     KernelContext,
     KernelResult,
     StepResult,
     Reflection,
-    CheckpointData,
+    ExecutionTrace,
+    IterationTrace,
+    ToolCallTrace,
+    PlanPort,
+    Plan,
+    PlanStep,
+    StepStatus,
+    PlanEvaluation,
+    Skill,
+    SkillResult,
+    SkillInstallResult,
+    SkillPort,
+    EvalPort,
+    TestCase,
+    TestSuite,
+    EvalResult,
+    BenchmarkResult,
 )
 
 from .feature_flags import (
@@ -27,28 +47,6 @@ from .feature_flags import (
     FeatureFlag,
     RolloutManager,
     get_rollout_manager,
-)
-
-from .context import (
-    KernelContext,
-    KernelResult,
-    ExecutionTrace,
-    IterationTrace,
-    ToolCallTrace,
-    PlanPort,
-    Plan,
-    PlanStep,
-    StepStatus,
-    PlanEvaluation,
-    SkillPort,
-    Skill,
-    SkillResult,
-    SkillInstallResult,
-    EvalPort,
-    TestCase,
-    TestSuite,
-    EvalResult,
-    BenchmarkResult,
 )
 
 __version__ = "1.0.0"
@@ -61,19 +59,12 @@ __all__ = [
     "AgentEvent",
     "Task",
     "KernelConfig",
+    "CheckpointData",
+    # 上下文
     "KernelContext",
     "KernelResult",
     "StepResult",
     "Reflection",
-    "CheckpointData",
-    # 特性开关
-    "FeatureFlags",
-    "FeatureGate",
-    "FeatureGroup",
-    "FeatureFlag",
-    "RolloutManager",
-    "get_rollout_manager",
-    # 上下文
     "ExecutionTrace",
     "IterationTrace",
     "ToolCallTrace",
@@ -82,13 +73,22 @@ __all__ = [
     "PlanStep",
     "StepStatus",
     "PlanEvaluation",
+    # 技能
     "SkillPort",
     "Skill",
     "SkillResult",
     "SkillInstallResult",
+    # 评测
     "EvalPort",
     "TestCase",
     "TestSuite",
     "EvalResult",
     "BenchmarkResult",
+    # 特性开关
+    "FeatureFlags",
+    "FeatureGate",
+    "FeatureGroup",
+    "FeatureFlag",
+    "RolloutManager",
+    "get_rollout_manager",
 ]
