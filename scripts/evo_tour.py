@@ -4,6 +4,7 @@ import time
 import asyncio
 from pathlib import Path
 from rich.console import Console
+from rich.prompt import Confirm
 from rich.panel import Panel
 from rich.live import Live
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -16,6 +17,20 @@ console = Console()
 async def run_tour():
     console.clear()
     console.print(Panel.fit("[bold magenta]🌟 Akita-Evo 沉浸式功能导览 🌟[/bold magenta]\n[dim]零基础新手体验脚本 v1.0[/dim]", border_style="magenta"))
+
+    # 预检：是否有钥匙
+    env_path = Path(".env")
+    has_key = False
+    if env_path.exists():
+        content = env_path.read_text(encoding="utf-8")
+        if "_API_KEY=" in content:
+            has_key = True
+
+    if not has_key:
+        console.print("\n[yellow]⚠️ 检测到你还没有配置“开启钥匙” (API Key)。[/yellow]")
+        if Confirm.ask("如果不配置钥匙，你只能观看演示，无法开始真正的正式聊天。是否现在去填钥匙？"):
+            os.system(f"{sys.executable} scripts/setup_key.py")
+            return
 
     # 步骤 1: 演示影子实验室
     with console.status("[bold blue]🧪 演示：影子实验室 (Shadow Workspace)...[/bold blue]") as status:
