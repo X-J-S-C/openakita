@@ -899,7 +899,8 @@ class Agent(BaseKernel):
         l1_promoted: set[str] = set()
         if intent and hasattr(self.memory_manager, "markdown_syncer"):
             # L1 Heuristic: 基于关键词的初级动态工具注入
-            intent_lower = intent.lower()
+            intent_str = intent.task_definition if hasattr(intent, "task_definition") else str(intent)
+            intent_lower = intent_str.lower()
             trigger_map = {
                 "search": {"web_search", "news_search", "search_memory"},
                 "browser": {"browser_navigate", "browser_screenshot", "browser_click"},
