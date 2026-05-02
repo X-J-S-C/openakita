@@ -17,7 +17,13 @@ def setup_key():
     console.print("\n[yellow]💡 什么是“开启钥匙” (API Key)？[/yellow]")
     console.print("这就像是给机器人充值的“话费卡”或“身份证”。有了它，机器人才能调用像 Claude 或 DeepSeek 这样强大的大脑来为你工作。")
 
-    env_path = Path(".env")
+    # 确保写入 pyproject.toml 所在的根目录
+    script_parent = Path(__file__).resolve().parent.parent
+    if (script_parent / "pyproject.toml").exists():
+        env_path = script_parent / ".env"
+    else:
+        env_path = Path(".env")
+
     existing_content = ""
     if env_path.exists():
         existing_content = env_path.read_text(encoding="utf-8")
