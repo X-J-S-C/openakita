@@ -64,6 +64,19 @@ OpenAkita 是一款开源全能 AI 助手——多个 AI Agent 协作分工、�
 
 ---
 
+## 🚀 Akita-Evo 极速体验 (新功能)
+
+你是零基础新手？没关系！运行以下命令，只需 1 分钟即可亲眼见证 Akita-Evo 的“自进化”魔法：
+
+```bash
+# 运行沉浸式功能导览，演示影子工作区、自愈进化与高保真仪表盘
+python scripts/evo_tour.py
+```
+
+想要更深入的了解？请阅读 [**GUIDE_FOR_BEGINNERS.md** (新手快速上手指南)](GUIDE_FOR_BEGINNERS.md)。
+
+---
+
 ## 核心能力
 
 <table>
