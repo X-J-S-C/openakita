@@ -86,6 +86,7 @@ def is_shadow_eligible(tool_name: str) -> bool:
         "create_file",
         "delete_file",
         "run_shell",
-        "run_powershell"
+        "run_powershell",
+        "trace_file_operations",
     }
     return tool_name in SHADOW_TOOLS

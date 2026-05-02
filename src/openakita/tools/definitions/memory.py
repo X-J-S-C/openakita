@@ -271,7 +271,13 @@ MEMORY_TOOLS = [
     {
         "name": "visualize_memory_graph",
         "category": "Memory",
-        "description": "Generate a Mermaid graph representing the relationship between L1-L4 memory layers and crystallized SOPs.",
+        "description": "Generate a visual dashboard (PNG) representing the relationship between L1-L4 memory layers, crystallized SOPs, and system health.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "trace_file_operations",
+        "category": "System",
+        "description": "Show the visual history tree of file operations in the current shadow workspace. Use this to review what has been modified, created, or deleted.",
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
 ]

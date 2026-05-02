@@ -459,6 +459,10 @@ class ToolExecutor:
                 self._shadow_workspaces[task_id] = sw
 
             sw = self._shadow_workspaces[task_id]
+            # 记录操作历史
+            path_for_record = tool_input.get("path") or tool_input.get("file_path") or tool_name
+            sw.record_operation(tool_name, str(path_for_record), **{k: v for k, v in tool_input.items() if k not in ("path", "file_path")})
+
             # 劫持路径参数
             for path_key in ("path", "file_path", "cwd"):
                 if path_key in tool_input and tool_input[path_key]:

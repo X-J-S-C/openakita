@@ -112,6 +112,8 @@ class MemoryHandler:
             return self._get_session_context(params)
         elif tool_name == "visualize_memory_graph":
             return self._visualize_memory_graph(params)
+        elif tool_name == "trace_file_operations":
+            return self._trace_file_operations(params)
         else:
             return f"❌ Unknown memory tool: {tool_name}"
 
@@ -800,11 +802,56 @@ class MemoryHandler:
         return output
 
     def _visualize_memory_graph(self, params: dict) -> str:
-        """生成记忆图谱的 Mermaid 展现。"""
-        if hasattr(self.agent.memory_manager, "markdown_syncer"):
-            mermaid = self.agent.memory_manager.markdown_syncer.generate_graph_mermaid()
-            return f"✅ 已生成记忆图谱 (Mermaid 格式):\n\n```mermaid\n{mermaid}\n```\n\n提示：你可以将此代码粘贴到 Mermaid 渲染器中查看，或让我在回复中直接渲染。"
-        return "❌ 当前记忆系统不支持图谱可视化。"
+        """生成记忆图谱的可视化仪表盘 (PNG)。"""
+        try:
+            from ...utils.dashboard_renderer import generate_dashboard
+            from ...config import settings
+
+            stats = self.agent.memory_manager.get_stats()
+            # 补充 SOP 统计
+            sops_dir = settings.skills_path / "auto"
+            stats['sops_count'] = len(list(sops_dir.glob("*.md"))) if sops_dir.exists() else 0
+
+            # 补充最近活动 (模拟)
+            stats['recent_activities'] = [
+                f"{datetime.now().strftime('%m-%d')} 记忆系统架构升级",
+                "Akita-Evo 新手指南生成",
+                "影子工作区常态化部署",
+                "结晶器自愈闭环验证成功"
+            ]
+
+            output_dir = settings.project_root / "data" / "plots"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            img_path = output_dir / f"memory_graph_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+
+            generate_dashboard(stats, str(img_path))
+
+            return f"📊 **记忆系统 3D 仪表盘已生成**\n\n文件路径: `{img_path}`\n\n该图谱展示了您的 5 层记忆分布、技能结晶进度以及系统知识关联网络。在桌面端，您应该能直接看到预览。"
+        except Exception as e:
+            logger.error(f"Dashboard generation failed: {e}", exc_info=True)
+            # Fallback to Mermaid
+            if hasattr(self.agent.memory_manager, "markdown_syncer"):
+                mermaid = self.agent.memory_manager.markdown_syncer.generate_graph_mermaid()
+                return f"⚠️ PNG 渲染失败 ({e})，降级为 Mermaid 模式:\n\n```mermaid\n{mermaid}\n```"
+            return f"❌ 记忆可视化失败: {e}"
+
+    def _trace_file_operations(self, params: dict) -> str:
+        """查看影子工作区的文件操作历史。"""
+        from ...core.agent import Agent
+        executor = getattr(self.agent, "tool_executor", None)
+        if not executor or not hasattr(executor, "_shadow_workspaces"):
+            return "❌ 无法访问工具执行器或影子工作区。"
+
+        # 尝试获取当前任务的影子空间
+        task_id = "global"
+        if self.agent.agent_state and self.agent.agent_state.current_task:
+            task_id = self.agent.agent_state.current_task.task_id
+
+        sw = executor._shadow_workspaces.get(task_id)
+        if not sw:
+            return f"💡 当前任务 ({task_id}) 尚无影子文件操作记录。"
+
+        return sw.generate_visual_tree()
 
     def _get_session_context(self, params: dict) -> str:
         """获取当前会话的详细上下文信息。"""

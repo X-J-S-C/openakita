@@ -338,7 +338,9 @@ risks_or_ambiguities:
 ```"""
 
 
-class Agent:
+from .kernel.base import BaseKernel
+
+class Agent(BaseKernel):
     """
     OpenAkita 主类
 
@@ -3450,6 +3452,18 @@ class Agent:
             f"(hard_limit={hard_limit}, messages={len(truncated)})"
         )
         return truncated
+
+    async def run_task(self, task: str, **kwargs) -> Any:
+        """Kernel SPI Implementation for run_task."""
+        return await self.chat(task, session_id=kwargs.get("session_id"))
+
+    def get_state(self) -> dict[str, Any]:
+        """Kernel SPI Implementation for get_state."""
+        return {
+            "agent_id": self.agent_id,
+            "status": "active" if self.agent_state else "idle",
+            "current_task": self.agent_state.current_task.goal if self.agent_state and self.agent_state.current_task else None
+        }
 
     async def chat(self, message: str, session_id: str | None = None) -> str:
         """

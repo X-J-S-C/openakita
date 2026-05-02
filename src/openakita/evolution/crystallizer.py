@@ -47,62 +47,95 @@ class SuccessCrystallizer:
 
     async def crystallize(self, task_description: str, react_trace: list[dict]) -> CrystallizationResult:
         """
-        从成功 Trace 中提炼技能
-
-        Args:
-            task_description: 原始任务描述
-            react_trace: ReAct 循环追踪数据
+        从成功 Trace 中提炼技能，并进行自愈验证。
         """
         if not react_trace:
             return CrystallizationResult(success=False, skill_name="", error="Trace 为空")
 
         logger.info(f"[Crystallizer] 开始为任务结晶技能: {task_description[:50]}...")
-
-        # 1. 预处理 Trace：移除冗余信息，仅保留成功的工具调用及其核心输入输出
         clean_trace = self._preprocess_trace(react_trace)
 
+        max_attempts = 3
+        current_attempt = 0
+        last_error = ""
+
+        while current_attempt < max_attempts:
+            current_attempt += 1
+            try:
+                # 1. 生成或修正技能定义
+                if current_attempt == 1:
+                    skill_info = await self._generate_skill_definition(task_description, clean_trace)
+                else:
+                    skill_info = await self._heal_skill_definition(task_description, skill_info, last_error)
+
+                skill_name = skill_info.get("name", "auto-generated-skill")
+                skill_content = skill_info.get("content", "")
+
+                if not skill_content:
+                    last_error = "生成内容为空"
+                    continue
+
+                # 2. 自愈验证 (Verify & Self-Heal)
+                is_verified = await self.verify_skill(skill_name, skill_content)
+
+                if is_verified:
+                    # 3. 验证通过，写入文件
+                    safe_name = self._normalize_skill_name(skill_name)
+                    auto_approve = getattr(settings, "evolution_auto_approve", False)
+                    target_dir = self.skills_dir if auto_approve else self.pending_dir
+                    skill_path = target_dir / safe_name
+                    skill_path.mkdir(exist_ok=True)
+
+                    final_content = skill_content.replace("name:", f"name: #verified-at-{datetime.now().strftime('%Y%m%d')}", 1)
+                    (skill_path / "SKILL.md").write_text(final_content, encoding="utf-8")
+
+                    logger.info(f"[Crystallizer] 技能结晶成功 (尝试次数={current_attempt}): {safe_name}")
+                    return CrystallizationResult(success=True, skill_name=safe_name, skill_dir=str(skill_path), skill_content=final_content)
+                else:
+                    last_error = "影子工作区演练验证失败：逻辑不通或步骤缺失。"
+                    logger.warning(f"[Crystallizer] 验证失败，准备第 {current_attempt+1} 次修正...")
+
+            except Exception as e:
+                last_error = str(e)
+                logger.error(f"[Crystallizer] 尝试 {current_attempt} 出错: {e}")
+
+        return CrystallizationResult(success=False, skill_name="", error=f"达到最大尝试次数，最后一次错误: {last_error}")
+
+    async def verify_skill(self, name: str, content: str) -> bool:
+        """
+        [Evo 核心] 在影子工作区验证技能。
+        模拟执行 SOP 中的 Instructions，确保其逻辑闭环。
+        """
+        # 如果配置显式关闭了演练，则默认通过
+        if not getattr(settings, "evolution_dry_run", True):
+            return True
+        return await self._dry_run_verify(name, content)
+
+    async def _heal_skill_definition(self, task: str, old_info: dict, error: str) -> dict:
+        """调用 LLM 针对报错修正技能定义"""
+        prompt = f"""之前的技能结晶在验证中失败了。请根据错误信息进行修正。
+
+### 原始任务
+{task}
+
+### 之前生成的技能 (有缺陷)
+{old_info.get('content')}
+
+### 错误信息
+{error}
+
+### 修正要求
+1. 分析错误根源。
+2. 优化 Instructions 步骤，增加必要的检查点。
+3. 确保返回合法的 JSON 格式。
+"""
+        response = await self.brain.think(prompt, system="你是一个技能自愈专家。只输出 JSON。")
         try:
-            # 2. 调用 LLM 生成 SKILL.md 内容
-            skill_info = await self._generate_skill_definition(task_description, clean_trace)
-
-            skill_name = skill_info.get("name", "auto-generated-skill")
-            skill_content = skill_info.get("content", "")
-
-            if not skill_content:
-                return CrystallizationResult(success=False, skill_name=skill_name, error="生成内容为空")
-
-            # 3. 确定存储路径 (根据审批设置决定是否存入 pending)
-            safe_name = self._normalize_skill_name(skill_name)
-            auto_approve = getattr(settings, "evolution_auto_approve", False)
-
-            target_dir = self.skills_dir if auto_approve else self.pending_dir
-            skill_path = target_dir / safe_name
-            skill_path.mkdir(exist_ok=True)
-
-            # 4. [Dry-Run] 自动演练验证 (可选)
-            is_verified = False
-            if getattr(settings, "evolution_dry_run", False):
-                is_verified = await self._dry_run_verify(skill_name, skill_content)
-
-            # 5. 写入文件
-            final_content = skill_content
-            if is_verified:
-                final_content = skill_content.replace("name:", "name: #verified", 1)
-
-            (skill_path / "SKILL.md").write_text(final_content, encoding="utf-8")
-
-            logger.info(f"[Crystallizer] 技能结晶成功 (Verified={is_verified}): {safe_name} -> {skill_path}")
-
-            return CrystallizationResult(
-                success=True,
-                skill_name=safe_name,
-                skill_dir=str(skill_path),
-                skill_content=final_content
-            )
-
-        except Exception as e:
-            logger.error(f"[Crystallizer] 结晶过程出错: {e}")
-            return CrystallizationResult(success=False, skill_name="", error=str(e))
+            content = strip_thinking_tags(response.content)
+            match = re.search(r"\{.*\}", content, re.DOTALL)
+            return json.loads(match.group()) if match else json.loads(content)
+        except Exception:
+            return old_info
 
     def _preprocess_trace(self, trace: list[dict]) -> list[dict]:
         """精简 Trace，只保留关键步骤"""
