@@ -64,16 +64,13 @@ OpenAkita 是一款开源全能 AI 助手——多个 AI Agent 协作分工、�
 
 ---
 
-## 🚀 Akita-Evo 极速体验 (新功能)
+## 🚀 Akita-Evo 一键起飞 (小白专属)
 
-你是零基础新手？没关系！只需要两步，1 分钟即可亲眼见证 Akita-Evo 的“自进化”魔法：
+你是零基础新手？没关系！**无需理会文件夹里的一堆文件**，只需运行下面这行命令，剩下的交给机器人：
 
 ```bash
-# 1. 准备钥匙：填写你的大脑钥匙 (API Key)
-python scripts/setup_key.py
-
-# 2. 观看导览：演示影子工作区、自愈进化与高保真仪表盘
-python scripts/evo_tour.py
+# 自动安装环境 + 填写钥匙 + 开启演示
+python scripts/bootstrap.py
 ```
 
 想要更深入的了解？请阅读 [**GUIDE_FOR_BEGINNERS.md** (新手快速上手指南)](GUIDE_FOR_BEGINNERS.md)。

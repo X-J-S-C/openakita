@@ -61,16 +61,13 @@ OpenAkita is an open-source, all-in-one AI assistant — multiple AI Agents work
 
 ---
 
-## 🚀 Akita-Evo Quick Experience (New)
+## 🚀 Akita-Evo One-Click Launch (Beginner Friendly)
 
-New to AI Agents? No problem! Just two steps, and 1 minute to witness the "self-evolving" magic of Akita-Evo:
+New to AI Agents? No problem! **Ignore the mess of files** — just run this single command and let the robot handle the rest:
 
 ```bash
-# 1. Setup Key: Fill your brain key (API Key)
-python scripts/setup_key.py
-
-# 2. Run Tour: Demo of Shadow Workspace, Self-Healing, and Dashboards
-python scripts/evo_tour.py
+# Auto Install + Setup Key + Run Demo
+python scripts/bootstrap.py
 ```
 
 Want a deeper dive? Read our [**GUIDE_FOR_BEGINNERS.md** (Quick Start Guide)](GUIDE_FOR_BEGINNERS.md).
